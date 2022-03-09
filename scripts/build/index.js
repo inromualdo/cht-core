@@ -43,6 +43,7 @@ const getApiUrl = (pathname = '') => {
 };
 
 const releaseName = TAG || BRANCH || 'local-development';
+const buildTime = new Date().getTime();
 
 const getVersion = () => {
   if (TAG) {
@@ -54,8 +55,10 @@ const getVersion = () => {
   if (BRANCH) {
     return `${packageJson.version}-${BRANCH}.${BUILD_NUMBER}`;
   }
-  return `${packageJson.version}-dev.${new Date().getTime()}`;
+  return `${packageJson.version}-dev.${buildTime}`;
 };
+
+const getImageTag = (service) => `medicmobile/cht-${service}:${getVersion()}`;
 
 const setBuildInfo = () => {
   const buildInfoPath = path.resolve(ddocsBuildPath, 'medic-db', 'medic', 'build_info');
@@ -129,7 +132,6 @@ const updateServiceWorker = () => {
   });
 };
 const setDdocsVersion = () => {
-  const version = getVersion();
   const databases = fs.readdirSync(ddocsBuildPath);
   databases.forEach(database => {
     const dbPath = path.resolve(ddocsBuildPath, database);
@@ -138,7 +140,7 @@ const setDdocsVersion = () => {
     }
     const ddocs = fs.readdirSync(dbPath);
     ddocs.forEach(ddoc => {
-      fs.writeFileSync(path.resolve(dbPath, ddoc, 'version'), version);
+      fs.writeFileSync(path.resolve(dbPath, ddoc, 'version'), getVersion());
     });
   });
 };
@@ -151,4 +153,6 @@ module.exports = {
   createStagingDoc,
   populateStagingDoc,
   updateServiceWorker,
+  getVersion,
+  getImageTag,
 };

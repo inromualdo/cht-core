@@ -292,6 +292,21 @@ module.exports = function(grunt) {
           )
           .join(' && '),
       },
+      'build-service-containers': {
+        cmd: () => ['api', 'sentinel']
+          .map(service =>
+            [
+              `cd ${service}`,
+              `npm ci --production`,
+              `npm dedupe`,
+              `cd ../`,
+              `docker build -f ./${service}/Dockerfile --tag ${buildUtils.getImageTag(service)} .`,
+              `docker image tag ${buildUtils.getImageTag(service)} localhost:5000/${buildUtils.getImageTag(service)}`,
+              `docker image push localhost:5000/${buildUtils.getImageTag(service)}`,
+            ].join(' && ')
+          )
+          .join(' && '),
+      },
       'bundle-dependencies': {
         cmd: () => {
           ['api', 'sentinel'].forEach(module => {
@@ -856,12 +871,13 @@ module.exports = function(grunt) {
     'notify:deployed',
   ]);
 
-  grunt.registerTask('build-node-modules', 'Build and pack api and sentinel bundles', [
+  grunt.registerTask('build-node-modules', 'Build and publish api and sentinel images', [
     'copy-static-files-to-api',
     'uglify:api',
     'cssmin:api',
-    'exec:bundle-dependencies',
-    'exec:pack-node-modules',
+    'exec:build-service-containers',
+    // 'exec:bundle-dependencies',
+    // 'exec:pack-node-modules',
   ]);
 
   grunt.registerTask('start-webdriver', 'Starts Protractor Webdriver', [

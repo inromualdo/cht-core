@@ -11,9 +11,9 @@ RUN apk add --update --no-cache \
   jq    \
   git
 
-WORKDIR /api
+WORKDIR /sentinel
 
-COPY api/ /api
+COPY sentinel/ /sentinel
 COPY shared-libs /shared-libs
 
-ENTRYPOINT ["/bin/bash", "/api/docker-entrypoint.sh", "main"]
+ENTRYPOINT ["/bin/bash", "/sentinel/docker-entrypoint.sh", "main"]

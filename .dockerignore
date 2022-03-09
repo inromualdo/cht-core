@@ -1,0 +1,7 @@
+**
+!/api/
+/api/tests/
+/*/.nyc_output/
+!/sentinel/
+/sentinel/tests/
+!/shared-libs/
