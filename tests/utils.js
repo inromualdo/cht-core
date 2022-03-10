@@ -9,6 +9,7 @@ const specReporter = require('jasmine-spec-reporter').SpecReporter;
 const fs = require('fs');
 const path = require('path');
 const Tail = require('tail').Tail;
+const { execSync, spawn } = require('child_process');
 
 const PouchDB = require('pouchdb-core');
 PouchDB.plugin(require('pouchdb-adapter-http'));
@@ -23,7 +24,6 @@ let originalSettings;
 const originalTranslations = {};
 let e2eDebug;
 const hasModal = () => element(by.css('#update-available')).isPresent();
-const { execSync } = require('child_process');
 const COUCH_USER_ID_PREFIX = 'org.couchdb.user:';
 
 
@@ -385,16 +385,10 @@ const deprecated = (name, replacement) => {
 
 const waitForSettingsUpdateLogs = (type) => {
   if (type === 'sentinel') {
-    return module.exports.waitForLogs(
-      module.exports.sentinelLogFile,
-      /Reminder messages allowed between/,
-    );
+    return module.exports.waitForSentinelLogs(/Reminder messages allowed between/);
   }
 
-  return module.exports.waitForLogs(
-    module.exports.apiLogFile,
-    /Settings updated/,
-  );
+  return module.exports.waitForApiLogs(/Settings updated/);
 };
 
 const apiRetry = () => {
@@ -550,6 +544,45 @@ const hostURL = (port = 80) => {
   const url = new URL(`http://${host}`);
   url.port = port;
   return url.href;
+};
+
+const waitForDockerLogs = (container, ...regex) => {
+  let timeout;
+  const params = `-f ${constants.DOCKER_COMPOSE_FILE} logs ${container} -f --tail=0`;
+  const proc = spawn('docker-compose', params.split(' '), { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  const kill = () => {
+    proc.stdout.destroy();
+    proc.stderr.destroy();
+    proc.kill('SIGINT');
+  };
+
+  const promise = new Promise((resolve, reject) => {
+    timeout = setTimeout(() => {
+      kill();
+      reject({ message: 'Timed out looking for details in log files.' });
+    }, 6000);
+
+    const checkOutput = (data) => {
+      data = data.toString();
+      if (regex.find(r => r.test(data))) {
+        kill();
+        clearTimeout(timeout);
+        resolve();
+      }
+    };
+
+    proc.stdout.on('data', checkOutput);
+    proc.stderr.on('data', checkOutput);
+  });
+
+  return {
+    promise,
+    cancel: () => {
+      kill();
+      clearTimeout(timeout);
+    },
+  };
 };
 
 module.exports = {
@@ -935,6 +968,20 @@ module.exports = {
     };
   },
 
+  waitForApiLogs: (...regex) => {
+    if (constants.IS_CI) {
+      return module.exports.waitForDockerLogs(constants.DOCKER_SERVICE_NAME.api, ...regex);
+    }
+    return module.exports.waitForLogs(module.exports.apiLogFile, ...regex);
+  },
+
+  waitForSentinelLogs: (...regex) => {
+    if (constants.IS_CI) {
+      return module.exports.waitForDockerLogs(constants.DOCKER_SERVICE_NAME.sentinel, ...regex);
+    }
+    return module.exports.waitForLogs(module.exports.sentinelLogFile, ...regex);
+  },
+
   /**
    * Watches a given logfile until at least one line matches one of the given regular expressions.
    * Watch expires after 10 seconds.
@@ -1068,4 +1115,5 @@ module.exports = {
 
   apiLogFile: 'api.e2e.log',
   sentinelLogFile: 'sentinel.e2e.log',
+  waitForDockerLogs,
 };

@@ -301,8 +301,7 @@ module.exports = function(grunt) {
               `npm dedupe`,
               `cd ../`,
               `docker build -f ./${service}/Dockerfile --tag ${buildUtils.getImageTag(service)} .`,
-              `docker image tag ${buildUtils.getImageTag(service)} localhost:5000/${buildUtils.getImageTag(service)}`,
-              `docker image push localhost:5000/${buildUtils.getImageTag(service)}`,
+              `docker image push ${buildUtils.getImageTag(service)}`,
             ].join(' && ')
           )
           .join(' && '),
@@ -876,8 +875,6 @@ module.exports = function(grunt) {
     'uglify:api',
     'cssmin:api',
     'exec:build-service-containers',
-    // 'exec:bundle-dependencies',
-    // 'exec:pack-node-modules',
   ]);
 
   grunt.registerTask('start-webdriver', 'Starts Protractor Webdriver', [

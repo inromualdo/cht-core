@@ -35,9 +35,9 @@ const startServer = (serviceName, append) => new Promise((resolve, reject) => {
 
     let server;
     if (constants.IS_CI) {
-      server = spawn('horti-svc-start', [
-        `${require('os').homedir()}/.horticulturalist/deployments`,
-        `medic-${serviceName}`
+      server = spawn('docker-compose', [
+        '-f', path.resolve(__dirname, '..', 'ci', 'cht-compose.yml'),
+        'start', `cht-${serviceName}`
       ]);
     } else {
       // runs your local checked out api / sentinel
@@ -69,8 +69,9 @@ const startServer = (serviceName, append) => new Promise((resolve, reject) => {
 
 const stopServer = (serviceName) => new Promise(res => {
   if (constants.IS_CI) {
-    const pid = spawn('horti-svc-stop', [
-      `medic-${serviceName}`
+    const pid = spawn('docker-compose', [
+      '-f', path.resolve(__dirname, '..', 'ci', 'cht-compose.yml'),
+      'stop', `cht-${serviceName}`, '-t', 1
     ]);
 
     pid.on('exit', res);

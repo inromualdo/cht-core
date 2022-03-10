@@ -40,6 +40,12 @@ const getServerUrl = (couchUrl) => {
   return url.toString();
 };
 
+const getNodeStatsUrl = (serverUrl, nodeName) => {
+  const url = new URL(serverUrl);
+  url.pathname = `/_node/${nodeName}/_stats`;
+  return url.toString();
+};
+
 const getAdminConfigUrl = (serverUrl, nodeName, username) => {
   const url = new URL(serverUrl);
   url.pathname = `/_node/${nodeName}/_config/admins/${username}`;
@@ -94,6 +100,27 @@ const checkNodeName = (nodeName, membership) => {
     membership.all_nodes.includes(nodeName);
 };
 
+const couchClusterReady = async (COUCH_URL) => {
+  const membership = await request.get(getMembershipUrl(COUCH_URL), { json: true });
+  const allNodes = membership.all_nodes.sort();
+  const clusterNodes = membership.cluster_nodes.sort();
+
+  const allNodesInCluster =
+          allNodes.every(node => clusterNodes.includes(node)) &&
+          clusterNodes.every(node => allNodes.includes(node));
+  if (!allNodesInCluster) {
+    throw new Error('CouchDb cluster is not ready', membership);
+  }
+
+  for (const node of allNodes) {
+    try {
+      await request.get(getNodeStatsUrl(COUCH_URL, node), { json: true });
+    } catch (err) {
+      throw new Error(`CouchDb node ${node} responded with ${err.statusCode}`);
+    }
+  }
+};
+
 const couchNodeNamesMatch = async (COUCH_URL, COUCH_NODE_NAME) => {
   const response = await request.get(getMembershipUrl(COUCH_URL), { json: true });
   if (checkNodeName(COUCH_NODE_NAME, response)) {
@@ -120,14 +147,35 @@ const couchDbVersionCheck = (COUCH_URL) => {
   });
 };
 
+const couchDbCheck = async (COUCH_URL, COUCH_NODE_NAME) => {
+  let retries = 100;
+  let lastErr;
+  const retryTimeout = () => new Promise(resolve => setTimeout(resolve, 1000));
+
+  do {
+    try {
+      retries--;
+      await couchDbVersionCheck(COUCH_URL);
+      await couchDbNoAdminPartyModeCheck(COUCH_URL);
+      await couchClusterReady(COUCH_URL);
+      await couchNodeNamesMatch(COUCH_URL, COUCH_NODE_NAME);
+      return;
+    } catch (err) {
+      lastErr = err;
+      console.log('CouchDb check failed', err);
+      await retryTimeout();
+    }
+  } while (retries);
+
+  throw lastErr;
+};
+
 const check = (COUCH_URL, COUCH_NODE_NAME) => {
   return Promise.resolve()
     .then(nodeVersionCheck)
     .then(() => envVarsCheck(COUCH_URL, COUCH_NODE_NAME))
     .then(() => couchDbUrlCheck(COUCH_URL))
-    .then(() => couchDbNoAdminPartyModeCheck(COUCH_URL))
-    .then(() => couchNodeNamesMatch(COUCH_URL, COUCH_NODE_NAME))
-    .then(() => couchDbVersionCheck(COUCH_URL));
+    .then(() => couchDbCheck(COUCH_URL, COUCH_NODE_NAME));
 };
 
 const getNodes = async (serverUrl) => {

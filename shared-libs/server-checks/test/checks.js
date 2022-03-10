@@ -13,6 +13,8 @@ describe('Server Checks service', () => {
   'use strict';
 
   let originalProcess;
+  let originalSetTimeout;
+  let clock;
 
   beforeEach(() => {
     originalProcess = process;
@@ -23,11 +25,14 @@ describe('Server Checks service', () => {
       env: { NODE_OPTIONS: { } },
       exit: sinon.stub(),
     };
+    originalSetTimeout = setTimeout;
+    clock = sinon.useFakeTimers();
     service = rewire('../src/checks');
   });
 
   afterEach(() => {
     sinon.restore();
+    clock.restore();
     process = originalProcess;
   });
 
@@ -170,23 +175,31 @@ describe('Server Checks service', () => {
 
     it('valid server', function() {
       sinon.stub(http, 'get').callsArgWith(1, { statusCode: 401 });
-      sinon.stub(request, 'get')
-        .onCall(0).resolves({ all_nodes: [ 'nonode@nohost' ], cluster_nodes: [ 'nonode@nohost' ] })
-        .onCall(1).resolves({ version: '2' });
+      sinon.stub(request, 'get').resolves({ version: '2' });
+      request.get
+        .withArgs(sinon.match('_membership'))
+        .resolves({ all_nodes: [ 'nonode@nohost' ], cluster_nodes: [ 'nonode@nohost' ] });
+      request.get
+        .withArgs(sinon.match('_stats'))
+        .resolves();
 
       return service.check('http://admin:pass@localhost:5984/medic', 'nonode@nohost');
     });
 
-    it('invalid couchdb version', () => {
+    it('invalid couchdb version', async () => {
       sinon.stub(http, 'get').callsArgWith(1, { statusCode: 401 });
-      sinon.stub(request, 'get').rejects('error');
+      sinon.stub(request, 'get').rejects({ an: 'error' });
 
-      return service
-        .check('http://admin:pass@localhost:5984/medic', 'nonode@nohost')
-        .then(() => chai.assert.fail('should throw'))
-        .catch(err => {
-          chai.expect(err.name).to.equal('error');
-        });
+      try {
+        const promise = service.check('http://admin:pass@localhost:5984/medic', 'nonode@nohost');
+        // request will be retried 100 times
+        Array.from({ length: 100 }).map(() => originalSetTimeout(() => clock.tick(100)));
+        await promise;
+        chai.expect.fail('Should have thrown');
+      } catch (err) {
+        chai.expect(err).to.deep.equal({ an: 'error' });
+        chai.expect(request.get.callCount).to.equal(100);
+      }
     });
 
     it('invalid server', () => {
@@ -214,29 +227,40 @@ describe('Server Checks service', () => {
   });
 
   describe('Validate env node names', () => {
-    it('invalid node name is caught', function() {
+    it('invalid node name is caught', async () => {
       sinon.stub(http, 'get').callsArgWith(1, { statusCode: 401 });
-      sinon.stub(request, 'get')
-        .onCall(0).resolves({ all_nodes: [ 'nonode@nohost' ], cluster_nodes: [ 'nonode@nohost' ] })
-        .onCall(1).resolves({ version: '2' });
 
-      return service
-        .check('http://admin:pass@localhost:5984/medic', 'bad_node_name')
-        .then(() => chai.assert.fail('should throw'))
-        .catch(err => {
-          chai.assert.isTrue(err.message.startsWith('Environment variable \'COUCH_NODE_NAME\' set to'));
-        });
+      sinon.stub(request, 'get').resolves({ version: '2' });
+      request.get
+        .withArgs(sinon.match('_membership'))
+        .resolves({ all_nodes: [ 'nonode@nohost' ], cluster_nodes: [ 'nonode@nohost' ] });
+      request.get
+        .withArgs(sinon.match('_stats'))
+        .resolves();
+
+      try {
+        const promise = service.check('http://admin:pass@localhost:5984/medic', 'bad_node_name');
+        Array.from({ length: 100 }).map(() => originalSetTimeout(() => clock.tick(100)));
+        await promise;
+        chai.expect.fail('Should have thrown');
+      } catch (err) {
+        chai.assert.isTrue(err.message.startsWith('Environment variable \'COUCH_NODE_NAME\' set to'));
+      }
     });
 
     it('valid node name logged', function() {
       sinon.stub(http, 'get').callsArgWith(1, {statusCode: 401});
-      sinon.stub(request, 'get')
-        .onCall(0).resolves({ all_nodes: [ 'nonode@nohost' ], cluster_nodes: [ 'nonode@nohost' ] })
-        .onCall(1).resolves({ version: '2' });
+      sinon.stub(request, 'get').resolves({ version: '2' });
+      request.get
+        .withArgs(sinon.match('_membership'))
+        .resolves({ all_nodes: [ 'nonode@nohost' ], cluster_nodes: [ 'nonode@nohost' ] });
+      request.get
+        .withArgs(sinon.match('_stats'))
+        .resolves();
 
       return service.check('http://admin:pass@localhost:5984/medic', 'nonode@nohost').then(() => {
         chai.assert.equal(console.log.callCount, 7);
-        chai.assert.equal(log(5), 'Environment variable "COUCH_NODE_NAME" matches server "nonode@nohost"');
+        chai.assert.equal(log(6), 'Environment variable "COUCH_NODE_NAME" matches server "nonode@nohost"');
       });
     });
   });
