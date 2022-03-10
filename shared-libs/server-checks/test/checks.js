@@ -193,7 +193,7 @@ describe('Server Checks service', () => {
       try {
         const promise = service.check('http://admin:pass@localhost:5984/medic', 'nonode@nohost');
         // request will be retried 100 times
-        Array.from({ length: 100 }).map(() => originalSetTimeout(() => clock.tick(100)));
+        Array.from({ length: 100 }).map(() => originalSetTimeout(() => clock.tick(1000)));
         await promise;
         chai.expect.fail('Should have thrown');
       } catch (err) {
@@ -240,7 +240,7 @@ describe('Server Checks service', () => {
 
       try {
         const promise = service.check('http://admin:pass@localhost:5984/medic', 'bad_node_name');
-        Array.from({ length: 100 }).map(() => originalSetTimeout(() => clock.tick(100)));
+        Array.from({ length: 100 }).map(() => originalSetTimeout(() => clock.tick(1000)));
         await promise;
         chai.expect.fail('Should have thrown');
       } catch (err) {
