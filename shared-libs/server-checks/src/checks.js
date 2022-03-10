@@ -176,6 +176,7 @@ const check = (COUCH_URL, COUCH_NODE_NAME) => {
     .then(() => envVarsCheck(COUCH_URL, COUCH_NODE_NAME))
     .then(() => couchDbUrlCheck(COUCH_URL))
     .then(() => couchDbCheck(COUCH_URL, COUCH_NODE_NAME));
+
 };
 
 const getNodes = async (serverUrl) => {
